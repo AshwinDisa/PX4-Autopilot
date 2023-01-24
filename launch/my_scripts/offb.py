@@ -26,19 +26,21 @@ class controller():
 
         self.current_state = State()
 
-        rospy.Subscriber("uav0/mavros/state", State, self.state_callback)
+        rospy.Subscriber("mavros/state", State, self.state_callback)
 
-        rospy.Subscriber('uav0/mavros/local_position/pose',
+        rospy.Subscriber('mavros/local_position/pose',
                             PoseStamped, self.position_callback)
 
     def control(self):
 
         rate = rospy.Rate(20)
 
-        rospy.wait_for_service("/uav0/mavros/cmd/arming")
-        arming_client = rospy.ServiceProxy("uav0/mavros/cmd/arming", CommandBool)
-        rospy.wait_for_service("/uav0/mavros/set_mode")
-        set_mode_client = rospy.ServiceProxy("uav0/mavros/set_mode", SetMode)
+        rospy.wait_for_service("mavros/cmd/arming")
+        arming_client = rospy.ServiceProxy("mavros/cmd/arming", CommandBool)
+        rospy.wait_for_service("mavros/set_mode")
+        set_mode_client = rospy.ServiceProxy("mavros/set_mode", SetMode)
+
+        print('In')
 
         offb_set_mode = SetModeRequest()
         offb_set_mode.custom_mode = 'OFFBOARD'
@@ -106,7 +108,7 @@ class hover():
         self.hover_y = hover_position[1]
         self.hover_z = hover_position[2]
 
-        self.pose_publisher = rospy.Publisher('uav0/mavros/setpoint_position/local',
+        self.pose_publisher = rospy.Publisher('mavros/setpoint_position/local',
                                     PoseStamped, queue_size = 10)
 
     def publisher(self):
@@ -133,7 +135,7 @@ class circular_trajectory():
         # self.desired_y = 0.0
         # self.desired_z = 0.0
 
-        self.pose_publisher = rospy.Publisher('uav0/mavros/setpoint_position/local',
+        self.pose_publisher = rospy.Publisher('mavros/setpoint_position/local',
                                     PoseStamped, queue_size = 10)
 
     def control(self):
@@ -169,7 +171,7 @@ class straight_trajectory():
         self.count = 0
         self.samplingTime = samplingTime
 
-        self.pose_publisher = rospy.Publisher('/uav0/mavros/setpoint_position/local',
+        self.pose_publisher = rospy.Publisher('mavros/setpoint_position/local',
                                         PoseStamped, queue_size = 10)
 
 
