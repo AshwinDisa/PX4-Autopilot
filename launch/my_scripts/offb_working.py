@@ -36,9 +36,9 @@ if __name__ == "__main__":
 
     pose = PoseStamped()
 
-    pose.pose.position.x = 0
-    pose.pose.position.y = 0
-    pose.pose.position.z = 2
+    pose.pose.position.x = 4
+    pose.pose.position.y = 3
+    pose.pose.position.z = 4
 
     # Send a few setpoints before starting
     for i in range(100):
@@ -63,7 +63,8 @@ if __name__ == "__main__":
 
             last_req = rospy.Time.now()
         else:
-            if(not current_state.armed and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
+            if(not current_state.armed and (rospy.Time.now() - last_req) > rospy.Duration(10.0)):
+                print("in")
                 if(arming_client.call(arm_cmd).success == True):
                     rospy.loginfo("Vehicle armed")
 
