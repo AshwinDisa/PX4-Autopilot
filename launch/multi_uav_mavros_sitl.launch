@@ -54,7 +54,7 @@
         <arg name="fcu_url" default="udp://:14541@localhost:14581"/>
 
         <include file="$(find px4)/launch/single_vehicle_spawn.launch">
-            <arg name="x" value="1"/>
+            <arg name="x" value="3"/>
             <arg name="y" value="0"/>
             <arg name="z" value="0"/>
             <arg name="R" value="0"/>
