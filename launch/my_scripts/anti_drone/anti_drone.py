@@ -16,7 +16,7 @@ class controller():
         self.hover_y = hover_position[1]
         self.hover_z = hover_position[2]
 
-        self.error = 0.1
+        self.error = 0.3
 
         self.flag = 0.0
 
