@@ -10,13 +10,13 @@ import modern_robotics as mr
 
 class controller():
 
-    def __init__(self, hover_position):
+    def __init__(self, hover_position, spawn_position):
 
         self.hover_x = hover_position[0]
         self.hover_y = hover_position[1]
         self.hover_z = hover_position[2]
 
-        self.error = 0.1
+        self.error = 0.3
 
         self.flag = 0.0
 
@@ -85,7 +85,7 @@ class controller():
 
                 self.flag = 1.0
                 # trajectory_mode.control()
-                circular_trajectory_mode.control()
+                # circular_trajectory_mode.control()
                 rate.sleep()
 
     def state_callback(self, state_msg):
@@ -94,13 +94,13 @@ class controller():
 
     def position_callback(self, data):
 
-        self.current_x = data.pose.position.x
-        self.current_y = data.pose.position.y
-        self.current_z = data.pose.position.z
+        self.current_x = data.pose.position.x + spawn_position[0]
+        self.current_y = data.pose.position.y + spawn_position[1]
+        self.current_z = data.pose.position.z + spawn_position[2]
 
 class hover():
 
-    def __init__(self, hover_position):
+    def __init__(self, hover_position, spawn_position):
 
         self.hover_x = hover_position[0]
         self.hover_y = hover_position[1]
@@ -113,15 +113,15 @@ class hover():
 
         pose_msg = PoseStamped()
 
-        pose_msg.pose.position.x = self.hover_x
-        pose_msg.pose.position.y = self.hover_y
-        pose_msg.pose.position.z = self.hover_z
+        pose_msg.pose.position.x = self.hover_x - spawn_position[0]
+        pose_msg.pose.position.y = self.hover_y - spawn_position[1]
+        pose_msg.pose.position.z = self.hover_z - spawn_position[2]
 
         self.pose_publisher.publish(pose_msg)
 
 class straight_trajectory():
 
-    def __init__(self, trajectory, timegap, Xstart, Xend, samplingTime, Tf):
+    def __init__(self, trajectory, timegap, Xstart, Xend, samplingTime, Tf, spawn_position):
 
         self.trajectory = trajectory
         self.timegap = timegap
@@ -148,8 +148,6 @@ class straight_trajectory():
 
         self.count += 1
 
-        print(self.count)
-
         if(self.count >= len(self.trajectory)):
 
             rospy.signal_shutdown("completed")
@@ -158,15 +156,15 @@ class straight_trajectory():
 
         pose = PoseStamped()
 
-        pose.pose.position.x = desired_x
-        pose.pose.position.y = desired_y
-        pose.pose.position.z = desired_z
+        pose.pose.position.x = desired_x - spawn_position[0]
+        pose.pose.position.y = desired_y - spawn_position[1]
+        pose.pose.position.z = desired_z - spawn_position[2]
 
         self.pose_publisher.publish(pose)
 
 class circular_trajectory():
 
-    def __init__(self, centre, radius, time_of_rev, samplingTime):
+    def __init__(self, centre, radius, time_of_rev, samplingTime, spawn_position):
 
         self.time = 0.0
         self.scale = 5.0
@@ -184,11 +182,18 @@ class circular_trajectory():
 
     def control(self):
 
-        t = self.time/4
+        t = self.time/0.7
 
         self.desired_x = self.xc + self.radius*math.cos(2*math.pi*t/self.time_of_rev)
         self.desired_y = self.yc + self.radius*math.sin(2*math.pi*t/self.time_of_rev)
-        self.desired_z = 5.0
+
+        if (t < 1):
+
+            self.desired_z = 1.0
+
+        else:
+
+            self.desired_z = t
 
         self.time += self.samplingTime
 
@@ -198,9 +203,9 @@ class circular_trajectory():
 
         pose_msg = PoseStamped()
 
-        pose_msg.pose.position.x = desired_x
-        pose_msg.pose.position.y = desired_y
-        pose_msg.pose.position.z = desired_z
+        pose_msg.pose.position.x = desired_x - spawn_position[0]
+        pose_msg.pose.position.y = desired_y - spawn_position[1]
+        pose_msg.pose.position.z = desired_z - spawn_position[2]
 
         self.pose_publisher.publish(pose_msg)
 
@@ -210,10 +215,11 @@ if __name__ == "__main__":
     try:
 
         rospy.init_node("drone_offb_node_py")
-        hover_position = [0, 0, 5]
+        hover_position = [0, 0, 1]
+        spawn_position = [0, 0, 0]
 
         traj_initial_pos = np.array(hover_position)
-        traj_final_pos = np. array([20, 4, 6])
+        traj_final_pos = np. array([25, 40, 5])
 
         Xstart = np.zeros((4, 4))
         Xend = np.zeros((4, 4))
@@ -222,7 +228,7 @@ if __name__ == "__main__":
         Xend[:3, 3] = traj_final_pos
 
         # straight line trajectory
-        Tf = 12                                # time to reach from start to end position
+        Tf = 15                                # time to reach from start to end position
         samplingTime = 1/100                    # sampling time in seconds
         N = int(Tf/samplingTime)                # number of samples
         method = 5                              # interpolation method
@@ -233,19 +239,19 @@ if __name__ == "__main__":
         # circular trajectory
 
         centre = [0, 0]
-        radius = 10.0
-        time_of_rev = 8.0
+        radius = 20.0
+        time_of_rev = 20.0
         samplingTime = 1/100
 
-        hover_mode = hover(hover_position)
+        hover_mode = hover(hover_position, spawn_position)
 
         trajectory_mode = straight_trajectory(
-            trajectory, timegap, Xstart, Xend, samplingTime, Tf)
+            trajectory, timegap, Xstart, Xend, samplingTime, Tf, spawn_position)
 
         circular_trajectory_mode = circular_trajectory(centre, radius,
-                                        time_of_rev, samplingTime)
+                                        time_of_rev, samplingTime, spawn_position)
 
-        drone_controller = controller(hover_position)
+        drone_controller = controller(hover_position, spawn_position)
         drone_controller.control()
 
         rospy.spin()
