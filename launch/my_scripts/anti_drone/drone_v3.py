@@ -84,7 +84,7 @@ class controller():
             else:
 
                 self.flag = 1.0
-                # trajectory_mode.control()
+                trajectory_mode.control()
                 # circular_trajectory_mode.control()
                 rate.sleep()
 
@@ -215,11 +215,11 @@ if __name__ == "__main__":
     try:
 
         rospy.init_node("drone_offb_node_py")
-        hover_position = [0, 0, 1]
-        spawn_position = [0, 0, 0]
+        hover_position = [30, 0, 10]
+        spawn_position = [20, 0, 0]
 
         traj_initial_pos = np.array(hover_position)
-        traj_final_pos = np. array([25, 40, 5])
+        traj_final_pos = np. array([-20, 0, 10])
 
         Xstart = np.zeros((4, 4))
         Xend = np.zeros((4, 4))
@@ -228,7 +228,7 @@ if __name__ == "__main__":
         Xend[:3, 3] = traj_final_pos
 
         # straight line trajectory
-        Tf = 15                                # time to reach from start to end position
+        Tf = 3                                  # time to reach from start to end position
         samplingTime = 1/100                    # sampling time in seconds
         N = int(Tf/samplingTime)                # number of samples
         method = 5                              # interpolation method
