@@ -120,7 +120,7 @@ class hover():
 
 class trajectory():
 
-    def __init__(self, hover_position, spawn_position):
+    def __init__(self, hover_position, spawn_position, spawn_position_drone):
 
         self.drone_current_x = 0.0
         self.drone_current_y = 0.0
@@ -183,9 +183,6 @@ class trajectory():
 
         heading = self.anti_drone_position_vector / magnitude_position_vector
 
-
-        # print(heading)
-
         if (v_j > 1):
 
             V = v_j * heading
@@ -216,9 +213,9 @@ class trajectory():
 
     def drone_position_callback(self, drone_data):
 
-        self.drone_current_x = drone_data.pose.position.x
-        self.drone_current_y = drone_data.pose.position.y
-        self.drone_current_z = drone_data.pose.position.z
+        self.drone_current_x = drone_data.pose.position.x + spawn_position_drone[0]
+        self.drone_current_y = drone_data.pose.position.y + spawn_position_drone[1]
+        self.drone_current_z = drone_data.pose.position.z + spawn_position_drone[2]
 
     def anti_drone_position_callback(self, data):
 
@@ -237,11 +234,12 @@ if __name__ == "__main__":
     try:
 
         rospy.init_node("anti_drone_method_2")
-        hover_position = [3, 0, 1]
+        hover_position = [3, 0, 2]
         spawn_position = [3 ,0, 0]
+        spawn_position_drone = [20, 0, -0.1]
 
         hover_mode = hover(hover_position, spawn_position)
-        trajectory_mode = trajectory(hover_position, spawn_position)
+        trajectory_mode = trajectory(hover_position, spawn_position, spawn_position_drone)
 
         drone_controller = controller(hover_position, spawn_position)
         drone_controller.control()
