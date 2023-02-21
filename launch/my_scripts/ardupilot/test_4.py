@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 
 """
-Converts gps data to local ned frame
+Converts gps data to local ned frame and vice versa
 """
 
 import rospy
@@ -10,6 +10,7 @@ import numpy as np
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State
 from sensor_msgs.msg import NavSatFix
+from geographic_msgs.msg import GeoPoseStamped
 from mavros_msgs.srv import CommandBool, CommandBoolRequest, SetMode, SetModeRequest
 
 class controller():
@@ -30,6 +31,21 @@ class controller():
 
         rospy.Subscriber("/mavros/global_position/global", NavSatFix, self.gps_callback)
 
+        self.gps_publisher = rospy.Publisher("/mavros/setpoint_position/global", GeoPoseStamped, queue_size = 10)
+
+    def gps_publish(self, gps_target):
+
+        gps_msg = GeoPoseStamped()
+
+        gps_msg.pose.position.latitude = gps_target[0]
+        gps_msg.pose.position.longitude = gps_target[1]
+        gps_msg.pose.position.altitude = gps_target[2] - 47.235
+        # gps_msg.pose.position.altitude = 490.0
+
+        # print(gps_target, "callback")
+
+        self.gps_publisher.publish(gps_msg)
+
     def gps_callback(self, gps_msg):
 
         self.lat = gps_msg.latitude
@@ -45,12 +61,6 @@ class controller():
         rospy.wait_for_service("/mavros/set_mode")
         set_mode_client = rospy.ServiceProxy("/mavros/set_mode", SetMode)
 
-        # offb_set_mode = SetModeRequest()
-        # offb_set_mode.custom_mode = 'OFFBOARD'
-
-        # arm_cmd = CommandBoolRequest()
-        # arm_cmd.value = True
-
         last_req = rospy.Time.now()
 
         while(not rospy.is_shutdown() and not self.current_state.connected):
@@ -61,13 +71,15 @@ class controller():
 
             gps_object.setENUorigin()
 
+            # get current x, y, z from gps data
             current_x, current_y, current_z = gps_object.geo2enu(self.lat, self.lon, self.height)
 
-            current_lat, current_lon, current_height = gps_object.enu2geo(target_pos)
+            # get lat, lon, alt from local frame data
+            gps_target = gps_object.enu2geo(target_pos[0], target_pos[1], target_pos[2])
 
-            print(current_lat, current_lon, current_height)
+            self.gps_publish(gps_target)
 
-            # print(current_x, current_y, current_z)
+            # print(current_z)
 
             rate.sleep()
 
@@ -99,7 +111,7 @@ class GPS_utils:
         # Save origin lat, lon, height
         self.latZero = 47.397742
         self.lonZero = 8.5455935
-        self.hgtZero = 535.2989163082119
+        self.hgtZero = 535.2589145438609
 
         # Get origin ECEF X,Y,Z
         origin = self.geo2ecef(self.latZero, self.lonZero, self.hgtZero)
@@ -206,7 +218,7 @@ if __name__ == "__main__":
 
         rospy.init_node("drone_offb_node_py")
 
-        target_pos = np.array([10, 0, 5])
+        target_pos = np.array([-10, -10, 5])
 
         gps_object = GPS_utils()
 
