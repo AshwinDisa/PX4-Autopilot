@@ -2,7 +2,7 @@
 
 """
 Gives pose commands in x, y, z
-Input: hover position = [10, 0, 5]
+Input: hover position = [10, 0, 5] and hover orientation in euler angles i.e [roll, pitch, yaw]
 
 Takeoff with rc or qgc.
 Stay in Position mode.
@@ -14,6 +14,7 @@ If position mode is set by the auto-pilot say after termination of script, it ca
 
 import rospy
 import math
+import tf
 import numpy as np
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State
@@ -58,26 +59,6 @@ class controller():
 
         while(not rospy.is_shutdown()):
 
-            if(self.current_state.mode != "OFFBOARD" and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-
-                rospy.sleep(1)
-
-                #if(set_mode_client.call(offb_set_mode).mode_sent == True):
-
-                    #rospy.loginfo("OFFBOARD enabled")
-
-                #last_req = rospy.Time.now()
-
-            #else:
-
-            if(not self.current_state.armed and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-
-                if(arming_client.call(arm_cmd).success == True):
-
-                    rospy.loginfo("Vehicle armed")
-
-                last_req = rospy.Time.now()
-
             hover_mode.publisher()
             rate.sleep()
 
@@ -87,22 +68,44 @@ class controller():
 
 class hover():
 
-    def __init__(self, hover_position, spawn_position):
+    def __init__(self, hover_position, hover_orientation, spawn_position):
 
         self.hover_x = hover_position[0]
         self.hover_y = hover_position[1]
         self.hover_z = hover_position[2]
+        self.euler = hover_orientation
 
         self.pose_publisher = rospy.Publisher('/mavros/setpoint_position/local',
                                     PoseStamped, queue_size = 10)
+
+        rospy.Subscriber('/mavros/local_position/pose', PoseStamped, self.pose_callback)
+
+    def pose_callback(self, posee_msg):
+
+        quat_x = posee_msg.pose.orientation.x
+        quat_y = posee_msg.pose.orientation.y
+        quat_z = posee_msg.pose.orientation.z
+        quat_w = posee_msg.pose.orientation.w
+
+        quaternion = np.array([quat_x, quat_y, quat_z, quat_w])
+
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+
+        print(euler[2]*180/math.pi)
 
     def publisher(self):
 
         pose_msg = PoseStamped()
 
+        quaternion = tf.transformations.quaternion_from_euler(self.euler[0]/180*math.pi, self.euler[1]/180*math.pi, self.euler[2]/180*math.pi)
+
         pose_msg.pose.position.x = self.hover_x - spawn_position[0]
         pose_msg.pose.position.y = self.hover_y - spawn_position[1]
         pose_msg.pose.position.z = self.hover_z - spawn_position[2]
+        pose_msg.pose.orientation.x = quaternion[0]
+        pose_msg.pose.orientation.y = quaternion[1]
+        pose_msg.pose.orientation.z = quaternion[2]
+        pose_msg.pose.orientation.w = quaternion[3]
 
         self.pose_publisher.publish(pose_msg)
 
@@ -115,11 +118,12 @@ if __name__ == "__main__":
 
     try:
 
-        rospy.init_node("drone_offb_node_py")
-        hover_position = [5, 0, 5]
+        rospy.init_node("drone_pose_node_py")
+        hover_position = [5, 2, 5]
+        hover_orientation = [0, 0, 135]
         spawn_position = [0, 0, 0]
 
-        hover_mode = hover(hover_position, spawn_position)
+        hover_mode = hover(hover_position, hover_orientation, spawn_position)
 
         drone_controller = controller(spawn_position)
         drone_controller.control()
