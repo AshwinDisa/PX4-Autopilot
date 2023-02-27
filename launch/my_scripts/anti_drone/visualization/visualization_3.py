@@ -12,9 +12,15 @@ class plot():
 
         self.ax = plt.figure().gca(projection='3d')
 
-        self.x = -13.85009479522705
-        self.y = -16.234638214111328
-        self.z = 9.992222785949707
+        # circular rosbag
+
+        # self.x = -13.85009479522705
+        # self.y = -16.234638214111328
+        # self.z = 9.992222785949707
+
+        self.x = 19.84624671936035
+        self.y = 52.27509689331055
+        self.z = 3.0360231399536133
 
         self.x_anti = 0.0
         self.y_anti = 0.0
@@ -136,8 +142,10 @@ class plot():
 
             plt.cla()
 
-            ax.set_xlim([-25, 5])
-            ax.set_ylim([-25, 5])
+            # circular rosbag
+
+            # ax.set_xlim([-25, 5])
+            # ax.set_ylim([-25, 5])
             ax.set_zlim([0, 15])
             ax.set_xlabel('X (m)')
             ax.set_ylabel('Y (m)')
