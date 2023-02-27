@@ -20,6 +20,7 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, CommandBoolRequest, SetMode, SetModeRequest
 import modern_robotics as mr
+from test_5 import *
 
 class controller():
 
@@ -60,6 +61,10 @@ class controller():
         while(not rospy.is_shutdown()):
 
             hover_mode.publisher()
+
+            # hello_obj = Hello()
+            # hello_obj.hello()
+
             rate.sleep()
 
     def state_callback(self, state_msg):
@@ -119,8 +124,8 @@ if __name__ == "__main__":
     try:
 
         rospy.init_node("drone_pose_node_py")
-        hover_position = [5, 2, 5]
-        hover_orientation = [0, 0, 135]
+        hover_position = [-10, -10, 5]
+        hover_orientation = [0, 0, 90]
         spawn_position = [0, 0, 0]
 
         hover_mode = hover(hover_position, hover_orientation, spawn_position)

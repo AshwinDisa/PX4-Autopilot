@@ -58,25 +58,8 @@ class controller():
 
         while(not rospy.is_shutdown()):
 
-            if(self.current_state.mode != "OFFBOARD" and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-
-                rospy.loginfo("waiting for offboard mode")
-                rospy.sleep(1)
-
-
-            if(not self.current_state.armed and (rospy.Time.now() - last_req) > rospy.Duration(5.0)):
-
-                rospy.loginfo("waiting for arming")
-                rospy.sleep(1)
-
-            if(self.current_state.armed and self.current_state.mode == "OFFBOARD" and self.flag == 0.0):
-
-                rospy.loginfo("Armed and Offboard enabled")
-                self.flag = 1.0
-
-
-            trajectory_mode.control()
-            # circular_trajectory_mode.control()
+            # trajectory_mode.control()
+            circular_trajectory_mode.control()
             rate.sleep()
 
     def state_callback(self, state_msg):
@@ -224,7 +207,7 @@ if __name__ == "__main__":
 
         centre = [0, 0]
         radius = 5.0
-        time_of_rev = 20.0
+        time_of_rev = 10.0
         samplingTime = 1/100
 
         hover_mode = hover(hover_position, spawn_position)
