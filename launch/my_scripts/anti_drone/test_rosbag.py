@@ -138,18 +138,11 @@ class trajectory():
 
         self.magnitude_position_vector = self.magnitude(self.anti_drone_position_vector)
 
-        # print("error", self.magnitude_position_vector)
-        # print("error2", self.anti_drone_position_vector)
-
         heading = self.anti_drone_position_vector / self.magnitude_position_vector
 
-        if (v_j > 1):
+        # print(heading)
 
-            V = v_j * heading
-
-        else:
-
-            V = 3 * heading
+        V = 3* v_j * heading
 
         displacement = math.sqrt(pow((self.anti_drone_current_x - self.drone_current_x),2) +
                                         pow((self.anti_drone_current_y - self.drone_current_y),2)
@@ -181,9 +174,15 @@ class trajectory():
 
         else:
 
-            self.v_i_x = self.drone_current_vel_x + V[0]
-            self.v_i_y = self.drone_current_vel_y + V[1]
-            self.v_i_z = self.drone_current_vel_z + V[2]
+            # relative frame
+            # self.v_i_x = self.drone_current_vel_x + V[0]
+            # self.v_i_y = self.drone_current_vel_y + V[1]
+            # self.v_i_z = self.drone_current_vel_z + V[2]
+
+            # absolute frame - heading
+            self.v_i_x = V[0]
+            self.v_i_y = V[1]
+            self.v_i_z = V[2]
 
         self.publisher(self.v_i_x, self.v_i_y, self.v_i_z)
 
