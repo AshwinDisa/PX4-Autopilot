@@ -7,6 +7,7 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State
 from mavros_msgs.srv import CommandBool, CommandBoolRequest, SetMode, SetModeRequest
 import modern_robotics as mr
+import tf
 
 global time
 time = 0.0
@@ -99,19 +100,23 @@ class trajectory():
 
         self.desired_z = 6.0
 
-        self.looping_time = 0.01            # 100Hz
+        self.looping_time = 0.01          # 20Hz
 
         self.displacement = 0.0
-
-        self.x_i_new = hover_position[0]
-        self.y_i_new = hover_position[1]
 
         self.abs_weightage = 0.0
         self.rel_weightage = 0.0
         self.denominator = 0.0
 
+        self.flag = 0.0
+
+        self.quaternion = np.array([0, 0, 0, 0])
+
         self.vel_publisher = rospy.Publisher('/mavros/setpoint_velocity/cmd_vel',
                                     TwistStamped, queue_size = 10)
+
+        self.pose_publisher = rospy.Publisher('/mavros/setpoint_position/local',
+                                    PoseStamped, queue_size = 10)
 
         rospy.Subscriber('/mavros/local_position/pose/old',
                             PoseStamped, self.drone_position_callback)
@@ -148,7 +153,11 @@ class trajectory():
 
         heading = self.anti_drone_position_vector / self.magnitude_position_vector
 
-        # print(heading)
+        heading_yaw = 180/math.pi*math.atan2((y_j - y_i),(x_j - x_i))
+
+        # print(heading_yaw)
+
+        self.quaternion = tf.transformations.quaternion_from_euler(0, 0, heading_yaw*math.pi/180)
 
         V = 3 * v_j * heading
 
@@ -156,6 +165,7 @@ class trajectory():
                                         pow((self.anti_drone_current_y - self.drone_current_y),2)
                                         + pow((self.anti_drone_current_z - self.drone_current_z),2))
 
+        # print(displacement)
 
         if (displacement < 1.0):
 
@@ -163,7 +173,7 @@ class trajectory():
             self.v_i_y = 0.0
             self.v_i_z = 0.0
 
-            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z)
+            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.quaternion)
 
             print("THROW NET")
 
@@ -183,22 +193,17 @@ class trajectory():
 
         else:
 
-
-            self.denominator = 2/5 * displacement
-            self.abs_weightage = math.tanh((displacement + 10) / self.denominator)
+            # self.denominator = 2/5 * displacement
+            self.abs_weightage = math.tanh((displacement + 10) / 70)
             self.rel_weightage = 1 - self.abs_weightage
 
-            print(self.abs_weightage)
+            # print(self.abs_weightage)
 
             self.v_i_x = self.drone_current_vel_x * self.rel_weightage + V[0] * self.abs_weightage
             self.v_i_y = self.drone_current_vel_y * self.rel_weightage + V[1] * self.abs_weightage
             self.v_i_z = self.drone_current_vel_z * self.rel_weightage + V[2] * self.abs_weightage
 
-        #     self.v_i_x = V[0]
-        #     self.v_i_y = V[1]
-        #     self.v_i_z = V[2]
-
-        self.publisher(self.v_i_x, self.v_i_y, self.v_i_z)
+            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.quaternion)
 
     def state_callback(self, state_msg):
 
@@ -208,7 +213,7 @@ class trajectory():
 
         return math.sqrt(sum(pow(element, 2) for element in vector))
 
-    def publisher(self, v_i_x, v_i_y, v_i_z):
+    def publisher(self, v_i_x, v_i_y, v_i_z, quaternion):
 
         # if (v_i_x > 4.0):
 
@@ -240,13 +245,39 @@ class trajectory():
         #     v_i_z = -3.0
         #     print("limiting vel")
 
+        if (self.flag == 0.0):
+
+            self.x_i_new = self.anti_drone_current_x
+            self.y_i_new = self.anti_drone_current_y
+            self.z_i_new = self.anti_drone_current_z
+            print(self.x_i_new, self.y_i_new)
+            self.flag = 1.0
+
+        self.x_i_new = self.x_i_new + self.v_i_x * self.looping_time
+        self.y_i_new = self.y_i_new + self.v_i_y * self.looping_time
+        self.z_i_new = self.z_i_new + self.v_i_z * self.looping_time
+
+        # print(self.x_i_new, self.y_i_new)
+
+        pose_msg = PoseStamped()
         vel_msg = TwistStamped()
+
+        pose_msg.pose.orientation.x = quaternion[0]
+        pose_msg.pose.orientation.y = quaternion[1]
+        pose_msg.pose.orientation.z = quaternion[2]
+        pose_msg.pose.orientation.w = quaternion[3]
+
+        pose_msg.pose.position.x = self.x_i_new
+        pose_msg.pose.position.y = self.y_i_new
+        pose_msg.pose.position.z = self.z_i_new
 
         vel_msg.twist.linear.x = v_i_x
         vel_msg.twist.linear.y = v_i_y
         vel_msg.twist.linear.z = v_i_z
 
-        self.vel_publisher.publish(vel_msg)
+        self.pose_publisher.publish(pose_msg)
+
+        # self.vel_publisher.publish(vel_msg)
 
     def drone_position_callback(self, drone_data):
 
@@ -265,6 +296,7 @@ class trajectory():
         self.drone_current_vel_x = data.twist.linear.x
         self.drone_current_vel_y = data.twist.linear.y
         self.drone_current_vel_z = data.twist.linear.z
+
 
 if __name__ == "__main__":
 
