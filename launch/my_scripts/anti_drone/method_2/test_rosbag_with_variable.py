@@ -24,6 +24,8 @@ class controller():
 
         self.flag = 0.0
 
+        self.looping_time = 10
+
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_z = 0.0
@@ -37,7 +39,7 @@ class controller():
 
     def control(self):
 
-        rate = rospy.Rate(20)
+        rate = rospy.Rate(self.looping_time)
 
         rospy.sleep(1)
 
@@ -45,7 +47,7 @@ class controller():
 
             trajectory_mode.control()
             global time
-            time += 0.05
+            time += 1/self.looping_time
             rate.sleep()
 
     def state_callback(self, state_msg):
@@ -100,7 +102,7 @@ class trajectory():
 
         self.desired_z = 6.0
 
-        self.looping_time = 0.01          # 20Hz
+        self.looping_time = 0.1          # 20Hz
 
         self.displacement = 0.0
 
@@ -155,8 +157,6 @@ class trajectory():
 
         heading_yaw = 180/math.pi*math.atan2((y_j - y_i),(x_j - x_i))
 
-        # print(heading_yaw)
-
         self.quaternion = tf.transformations.quaternion_from_euler(0, 0, heading_yaw*math.pi/180)
 
         V = 3 * v_j * heading
@@ -165,15 +165,19 @@ class trajectory():
                                         pow((self.anti_drone_current_y - self.drone_current_y),2)
                                         + pow((self.anti_drone_current_z - self.drone_current_z),2))
 
-        # print(displacement)
-
         if (displacement < 1.0):
 
             self.v_i_x = 0.0
             self.v_i_y = 0.0
             self.v_i_z = 0.0
 
-            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.quaternion)
+            vel_msg = TwistStamped()
+
+            vel_msg.twist.linear.x = self.v_i_x
+            vel_msg.twist.linear.y = self.v_i_y
+            vel_msg.twist.linear.z = self.v_i_z
+
+            self.vel_publisher.publish(vel_msg)
 
             print("THROW NET")
 
@@ -193,11 +197,8 @@ class trajectory():
 
         else:
 
-            # self.denominator = 2/5 * displacement
-            self.abs_weightage = math.tanh((displacement + 10) / 70)
+            self.abs_weightage = math.tanh((displacement + 10) / 40)
             self.rel_weightage = 1 - self.abs_weightage
-
-            # print(self.abs_weightage)
 
             self.v_i_x = self.drone_current_vel_x * self.rel_weightage + V[0] * self.abs_weightage
             self.v_i_y = self.drone_current_vel_y * self.rel_weightage + V[1] * self.abs_weightage
@@ -247,15 +248,15 @@ class trajectory():
 
         if (self.flag == 0.0):
 
-            self.x_i_new = self.anti_drone_current_x
-            self.y_i_new = self.anti_drone_current_y
-            self.z_i_new = self.anti_drone_current_z
-            print(self.x_i_new, self.y_i_new)
+            self.x_i_old = self.anti_drone_current_x
+            self.y_i_old = self.anti_drone_current_y
+            self.z_i_old = self.anti_drone_current_z
+            print(self.x_i_old, self.y_i_old)
             self.flag = 1.0
 
-        self.x_i_new = self.x_i_new + self.v_i_x * self.looping_time
-        self.y_i_new = self.y_i_new + self.v_i_y * self.looping_time
-        self.z_i_new = self.z_i_new + self.v_i_z * self.looping_time
+        self.x_i_new = self.x_i_old + self.v_i_x * self.looping_time
+        self.y_i_new = self.y_i_old + self.v_i_y * self.looping_time
+        self.z_i_new = self.z_i_old + self.v_i_z * self.looping_time
 
         # print(self.x_i_new, self.y_i_new)
 
@@ -278,6 +279,10 @@ class trajectory():
         self.pose_publisher.publish(pose_msg)
 
         # self.vel_publisher.publish(vel_msg)
+
+        self.x_i_old = self.x_i_new
+        self.y_i_old = self.y_i_new
+        self.z_i_old = self.z_i_new
 
     def drone_position_callback(self, drone_data):
 
