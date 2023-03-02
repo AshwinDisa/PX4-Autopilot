@@ -114,6 +114,8 @@ class trajectory():
 
         self.prev_vel_unit_sum = 0.0
 
+        self.yaw_rate_gain = 0.01
+
         self.quaternion = np.array([0, 0, 0, 0])
 
         self.vel_publisher = rospy.Publisher('/mavros/setpoint_velocity/cmd_vel',
@@ -157,6 +159,16 @@ class trajectory():
         heading = self.anti_drone_position_vector / self.magnitude_position_vector
 
         heading_yaw = 180/math.pi*math.atan2((y_j - y_i),(x_j - x_i))
+
+        self.roll, self.pitch, self.yaw = tf.transformations.euler_from_quaternion(self.anti_drone_quaternion)
+
+        yaw_deg = 180/math.pi*self.yaw
+
+        yaw_error = heading_yaw - yaw_deg
+
+        print(yaw_error)
+
+        self.drone_yaw_rate = self.yaw_rate_gain * (yaw_error)
 
         self.quaternion = tf.transformations.quaternion_from_euler(0, 0, heading_yaw*math.pi/180)
 
@@ -211,11 +223,9 @@ class trajectory():
 
                 self.denominator = -4500000000000000 * math.pow(vel_change_diff, 6) + 110
 
-
-
             self.prev_vel_unit_sum = self.vel_unit_sum
 
-            print(vel_change_diff, self.denominator)
+            # print(vel_change_diff, self.denominator)
 
             self.abs_weightage = math.tanh((displacement + 10) / self.denominator)
             self.rel_weightage = 1 - self.abs_weightage
@@ -224,7 +234,7 @@ class trajectory():
             self.v_i_y = self.drone_current_vel_y * self.rel_weightage + V[1] * self.abs_weightage
             self.v_i_z = self.drone_current_vel_z * self.rel_weightage + V[2] * self.abs_weightage
 
-            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.quaternion)
+            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.drone_yaw_rate, self.quaternion)
 
     def state_callback(self, state_msg):
 
@@ -234,7 +244,7 @@ class trajectory():
 
         return math.sqrt(sum(pow(element, 2) for element in vector))
 
-    def publisher(self, v_i_x, v_i_y, v_i_z, quaternion):
+    def publisher(self, v_i_x, v_i_y, v_i_z, v_i_yaw, quaternion):
 
         # if (v_i_x > 4.0):
 
@@ -296,9 +306,11 @@ class trajectory():
         vel_msg.twist.linear.y = v_i_y
         vel_msg.twist.linear.z = v_i_z
 
+        vel_msg.twist.angular.z = v_i_yaw
+
         self.vel_publisher.publish(vel_msg)
 
-        self.pose_publisher.publish(pose_msg)
+        # self.pose_publisher.publish(pose_msg)
 
         # self.vel_publisher.publish(vel_msg)
 
@@ -322,6 +334,8 @@ class trajectory():
         self.anti_drone_quat_y = data.pose.orientation.y
         self.anti_drone_quat_z = data.pose.orientation.z
         self.anti_drone_quat_w = data.pose.orientation.w
+
+        self.anti_drone_quaternion = np.array([self.anti_drone_quat_x, self.anti_drone_quat_y, self.anti_drone_quat_z, self.anti_drone_quat_w])
 
     def drone_velocity_callback(self, data):
 
