@@ -14,15 +14,7 @@ time = 0.0
 
 class controller():
 
-    def __init__(self, hover_position, spawn_position):
-
-        self.hover_x = hover_position[0]
-        self.hover_y = hover_position[1]
-        self.hover_z = hover_position[2]
-
-        self.error = 0.3
-
-        self.flag = 0.0
+    def __init__(self):
 
         self.looping_time = 0.05
 
@@ -43,6 +35,8 @@ class controller():
 
         rospy.sleep(1)
 
+        # main while loop
+
         while(not rospy.is_shutdown()):
 
             trajectory_mode.control()
@@ -56,34 +50,13 @@ class controller():
 
     def position_callback(self, data):
 
-        self.current_x = data.pose.position.x + spawn_position[0]
-        self.current_y = data.pose.position.y + spawn_position[1]
-        self.current_z = data.pose.position.z + spawn_position[2]
-
-class hover():
-
-    def __init__(self, hover_position, spawn_position):
-
-        self.hover_x = hover_position[0]
-        self.hover_y = hover_position[1]
-        self.hover_z = hover_position[2]
-
-        self.pose_publisher = rospy.Publisher('/mavros/setpoint_position/local',
-                                    PoseStamped, queue_size = 10)
-
-    def publisher(self):
-
-        pose_msg = PoseStamped()
-
-        pose_msg.pose.position.x = self.hover_x - spawn_position[0]
-        pose_msg.pose.position.y = self.hover_y - spawn_position[1]
-        pose_msg.pose.position.z = self.hover_z - spawn_position[2]
-
-        self.pose_publisher.publish(pose_msg)
+        self.current_x = data.pose.position.x
+        self.current_y = data.pose.position.y
+        self.current_z = data.pose.position.z
 
 class trajectory():
 
-    def __init__(self, hover_position, spawn_position, spawn_position_drone):
+    def __init__(self):
 
         self.drone_current_x = 0.0
         self.drone_current_y = 0.0
@@ -97,12 +70,11 @@ class trajectory():
         self.drone_current_vel_y = 0.0
         self.drone_current_vel_z = 0.0
 
-        self.time_current = 0.0
-        self.time_prev = 0.0
+        self.drone_current_vel_x = 0.001
+        self.drone_current_vel_y = 0.001
+        self.drone_current_vel_z = 0.001
 
-        self.desired_z = 6.0
-
-        self.looping_time = 0.05          # 20Hz
+        self.looping_time = 0.05
 
         self.displacement = 0.0
 
@@ -110,13 +82,12 @@ class trajectory():
         self.rel_weightage = 0.0
         self.denominator = 0.0
 
-        self.flag = 0.0
-
         self.prev_vel_unit_sum = 0.0
 
-        self.yaw_rate_gain = 0.01
+        self.yaw_rate_P_gain = 0.02
+        self.yaw_rate_D_gain = 0.01
 
-        self.quaternion = np.array([0, 0, 0, 0])
+        self.prev_yaw_error = 0.0
 
         self.vel_publisher = rospy.Publisher('/mavros/setpoint_velocity/cmd_vel',
                                     TwistStamped, queue_size = 10)
@@ -147,94 +118,121 @@ class trajectory():
                                         pow((self.drone_current_vel_y),2)
                                         + pow((self.drone_current_vel_z),2))
 
-
-        self.drone_position_vector = np.array([self.drone_current_x, self.drone_current_y, self.drone_current_z])
-
-        self.anti_drone_position_vector = np.array([- self.anti_drone_current_x + self.drone_current_x,
-                                                - self.anti_drone_current_y + self.drone_current_y,
-                                                - self.anti_drone_current_z + self.drone_current_z])
-
-        self.magnitude_position_vector = self.magnitude(self.anti_drone_position_vector)
-
-        heading = self.anti_drone_position_vector / self.magnitude_position_vector
-
         heading_yaw = 180/math.pi*math.atan2((y_j - y_i),(x_j - x_i))
 
-        self.roll, self.pitch, self.yaw = tf.transformations.euler_from_quaternion(self.anti_drone_quaternion)
+        # to estimate anti-drone current heading (yaw)
 
-        yaw_deg = 180/math.pi*self.yaw
+        roll, pitch, yaw = tf.transformations.euler_from_quaternion(self.anti_drone_quaternion)
+
+        yaw_deg = 180 / math.pi * yaw
+
+        # PD controller to control anti-drone heading towards drone at all times
 
         yaw_error = heading_yaw - yaw_deg
 
-        print(yaw_error)
+        drone_yaw_rate = self.yaw_rate_P_gain * (yaw_error) + self.yaw_rate_D_gain * (yaw_error - self.prev_yaw_error)
 
-        self.drone_yaw_rate = self.yaw_rate_gain * (yaw_error)
+        quaternion = tf.transformations.quaternion_from_euler(0, 0, heading_yaw * math.pi / 180)
 
-        self.quaternion = tf.transformations.quaternion_from_euler(0, 0, heading_yaw*math.pi/180)
+        self.prev_yaw_error = yaw_error
+
+        # to estimate heading between drone and anti-drone
+
+        heading = self.drone_heading()
+
+        # absolute velocity term, 3 times the current velocity of drone
 
         V = 3 * v_j * heading
+
+        #displacement between drone and anti_drone
 
         displacement = math.sqrt(pow((self.anti_drone_current_x - self.drone_current_x),2) +
                                         pow((self.anti_drone_current_y - self.drone_current_y),2)
                                         + pow((self.anti_drone_current_z - self.drone_current_z),2))
 
+        # to check if impact happened or not
+
         if (displacement < 1.0):
 
-            self.v_i_x = 0.0
-            self.v_i_y = 0.0
-            self.v_i_z = 0.0
+            # stop anti-drone and return to home
 
-            vel_msg = TwistStamped()
-
-            vel_msg.twist.linear.x = self.v_i_x
-            vel_msg.twist.linear.y = self.v_i_y
-            vel_msg.twist.linear.z = self.v_i_z
-
-            self.vel_publisher.publish(vel_msg)
-
-            print("THROW NET")
-
-            rospy.sleep(1)
-
-            # offb_set_mode = SetModeRequest()
-            # offb_set_mode.custom_mode = 'AUTO.RTL'
-
-            # if (self.current_state.mode != "AUTO.RTL"):
-
-            #     if (self.set_mode_client.call(offb_set_mode).mode_sent == True):
-
-            #         rospy.loginfo("RTL enabled")
-            #         rospy.signal_shutdown("impact")
-
-            rospy.signal_shutdown("impact")
+            self.auto_rtl()
 
         else:
 
-            self.drone_vel_vector = np.array([self.drone_current_vel_x, self.drone_current_vel_y, self.drone_current_vel_z])
-            vel_unit_vector = self.drone_vel_vector / self.magnitude(self.drone_vel_vector)
-            self.vel_unit_sum = vel_unit_vector[0] + vel_unit_vector[1] + vel_unit_vector[2]
-            vel_change_diff = self.vel_unit_sum - self.prev_vel_unit_sum
+            # to check if drone is travelling straight or changing direction
 
-            if (vel_change_diff > 0.005 or vel_change_diff < -0.005 or vel_change_diff == 0.0):
+            drone_vel_vector = np.array([self.drone_current_vel_x, self.drone_current_vel_y,
+                                                                    self.drone_current_vel_z])
 
-                self.denominator = 40
+            vel_change_diff = self.drone_path(drone_vel_vector)
 
-            else:
+            # estimate weightage of absolute and relative velocities
 
-                self.denominator = -4500000000000000 * math.pow(vel_change_diff, 6) + 110
+            abs_weightage = math.tanh((displacement + 10) / 50)
+            rel_weightage = 1 - abs_weightage
 
-            self.prev_vel_unit_sum = self.vel_unit_sum
+            # estimate final velocity
 
-            # print(vel_change_diff, self.denominator)
+            v_i_x = self.drone_current_vel_x * rel_weightage + V[0] * abs_weightage
+            v_i_y = self.drone_current_vel_y * rel_weightage + V[1] * abs_weightage
+            v_i_z = self.drone_current_vel_z * rel_weightage + V[2] * abs_weightage
 
-            self.abs_weightage = math.tanh((displacement + 10) / self.denominator)
-            self.rel_weightage = 1 - self.abs_weightage
+            self.publisher(v_i_x, v_i_y, v_i_z, drone_yaw_rate, quaternion)
 
-            self.v_i_x = self.drone_current_vel_x * self.rel_weightage + V[0] * self.abs_weightage
-            self.v_i_y = self.drone_current_vel_y * self.rel_weightage + V[1] * self.abs_weightage
-            self.v_i_z = self.drone_current_vel_z * self.rel_weightage + V[2] * self.abs_weightage
+    def drone_heading(self):
 
-            self.publisher(self.v_i_x, self.v_i_y, self.v_i_z, self.drone_yaw_rate, self.quaternion)
+        anti_drone_position_vector = np.array([- self.anti_drone_current_x + self.drone_current_x,
+                                                - self.anti_drone_current_y + self.drone_current_y,
+                                                - self.anti_drone_current_z + self.drone_current_z])
+
+        magnitude_position_vector = self.magnitude(anti_drone_position_vector)
+
+        return anti_drone_position_vector / magnitude_position_vector
+
+    def drone_path(self, drone_vel_vector):
+
+        vel_unit_vector = drone_vel_vector / self.magnitude(drone_vel_vector)
+
+        vel_unit_sum = vel_unit_vector[0] + vel_unit_vector[1] + vel_unit_vector[2]
+
+        vel_change_diff = vel_unit_sum - self.prev_vel_unit_sum
+
+        self.prev_vel_unit_sum = vel_unit_sum
+
+        return vel_change_diff
+
+    def auto_rtl(self):
+
+        v_i_x = 0.0
+        v_i_y = 0.0
+        v_i_z = 0.0
+
+        vel_msg = TwistStamped()
+
+        vel_msg.twist.linear.x = v_i_x
+        vel_msg.twist.linear.y = v_i_y
+        vel_msg.twist.linear.z = v_i_z
+
+        self.vel_publisher.publish(vel_msg)
+
+        print("THROW NET")
+
+        rospy.sleep(1)
+
+        # service request for Return to Home
+
+        # offb_set_mode = SetModeRequest()
+        # offb_set_mode.custom_mode = 'AUTO.RTL'
+
+        # if (self.current_state.mode != "AUTO.RTL"):
+
+        #     if (self.set_mode_client.call(offb_set_mode).mode_sent == True):
+
+        #         rospy.loginfo("RTL enabled")
+        #         rospy.signal_shutdown("impact")
+
+        rospy.signal_shutdown("impact")
 
     def state_callback(self, state_msg):
 
@@ -245,6 +243,8 @@ class trajectory():
         return math.sqrt(sum(pow(element, 2) for element in vector))
 
     def publisher(self, v_i_x, v_i_y, v_i_z, v_i_yaw, quaternion):
+
+        # limit velocities in all directions
 
         # if (v_i_x > 4.0):
 
@@ -276,31 +276,9 @@ class trajectory():
         #     v_i_z = -3.0
         #     print("limiting vel")
 
-        if (self.flag == 0.0):
+        # publish velocity message
 
-            self.x_i_old = self.anti_drone_current_x
-            self.y_i_old = self.anti_drone_current_y
-            self.z_i_old = self.anti_drone_current_z
-
-            self.flag = 1.0
-
-        self.x_i_new = self.x_i_old + self.v_i_x * self.looping_time
-        self.y_i_new = self.y_i_old + self.v_i_y * self.looping_time
-        self.z_i_new = self.z_i_old + self.v_i_z * self.looping_time
-
-        # print(self.x_i_new, self.y_i_new)
-
-        pose_msg = PoseStamped()
         vel_msg = TwistStamped()
-
-        pose_msg.pose.orientation.x = quaternion[0]
-        pose_msg.pose.orientation.y = quaternion[1]
-        pose_msg.pose.orientation.z = quaternion[2]
-        pose_msg.pose.orientation.w = quaternion[3]
-
-        pose_msg.pose.position.x = self.x_i_new
-        pose_msg.pose.position.y = self.y_i_new
-        pose_msg.pose.position.z = self.z_i_new
 
         vel_msg.twist.linear.x = v_i_x
         vel_msg.twist.linear.y = v_i_y
@@ -310,32 +288,25 @@ class trajectory():
 
         self.vel_publisher.publish(vel_msg)
 
-        # self.pose_publisher.publish(pose_msg)
-
-        # self.vel_publisher.publish(vel_msg)
-
-        self.x_i_old = self.x_i_new
-        self.y_i_old = self.y_i_new
-        self.z_i_old = self.z_i_new
-
     def drone_position_callback(self, drone_data):
 
-        self.drone_current_x = drone_data.pose.position.x + spawn_position_drone[0]
-        self.drone_current_y = drone_data.pose.position.y + spawn_position_drone[1]
-        self.drone_current_z = drone_data.pose.position.z + spawn_position_drone[2]
+        self.drone_current_x = drone_data.pose.position.x
+        self.drone_current_y = drone_data.pose.position.y
+        self.drone_current_z = drone_data.pose.position.z
 
     def anti_drone_position_callback(self, data):
 
-        self.anti_drone_current_x = data.pose.position.x + spawn_position[0]
-        self.anti_drone_current_y = data.pose.position.y + spawn_position[1]
-        self.anti_drone_current_z = data.pose.position.z + spawn_position[2]
+        self.anti_drone_current_x = data.pose.position.x
+        self.anti_drone_current_y = data.pose.position.y
+        self.anti_drone_current_z = data.pose.position.z
 
         self.anti_drone_quat_x = data.pose.orientation.x
         self.anti_drone_quat_y = data.pose.orientation.y
         self.anti_drone_quat_z = data.pose.orientation.z
         self.anti_drone_quat_w = data.pose.orientation.w
 
-        self.anti_drone_quaternion = np.array([self.anti_drone_quat_x, self.anti_drone_quat_y, self.anti_drone_quat_z, self.anti_drone_quat_w])
+        self.anti_drone_quaternion = np.array([self.anti_drone_quat_x, self.anti_drone_quat_y,
+                                            self.anti_drone_quat_z, self.anti_drone_quat_w])
 
     def drone_velocity_callback(self, data):
 
@@ -343,20 +314,19 @@ class trajectory():
         self.drone_current_vel_y = data.twist.linear.y
         self.drone_current_vel_z = data.twist.linear.z
 
-
 if __name__ == "__main__":
 
     try:
 
         rospy.init_node("anti_drone_method_2")
-        hover_position = [0, 0, 2]
-        spawn_position = [0 ,0, 0]
-        spawn_position_drone = [0, 0, -0.1]
 
-        hover_mode = hover(hover_position, spawn_position)
-        trajectory_mode = trajectory(hover_position, spawn_position, spawn_position_drone)
+        # initialize trajectory object
 
-        drone_controller = controller(hover_position, spawn_position)
+        trajectory_mode = trajectory()
+
+        # initialize main control object and call control function
+
+        drone_controller = controller()
         drone_controller.control()
 
     except rospy.ROSInterruptException:
