@@ -24,7 +24,7 @@ class controller():
 
         self.flag = 0.0
 
-        self.looping_time = 10
+        self.looping_time = 0.05
 
         self.current_x = 0.0
         self.current_y = 0.0
@@ -39,7 +39,7 @@ class controller():
 
     def control(self):
 
-        rate = rospy.Rate(self.looping_time)
+        rate = rospy.Rate(1/self.looping_time)
 
         rospy.sleep(1)
 
@@ -102,7 +102,7 @@ class trajectory():
 
         self.desired_z = 6.0
 
-        self.looping_time = 0.1          # 20Hz
+        self.looping_time = 0.05          # 20Hz
 
         self.displacement = 0.0
 
@@ -111,6 +111,8 @@ class trajectory():
         self.denominator = 0.0
 
         self.flag = 0.0
+
+        self.prev_vel_unit_sum = 0.0
 
         self.quaternion = np.array([0, 0, 0, 0])
 
@@ -143,7 +145,6 @@ class trajectory():
                                         pow((self.drone_current_vel_y),2)
                                         + pow((self.drone_current_vel_z),2))
 
-        self.drone_vel_vector = np.array([self.drone_current_vel_x, self.drone_current_vel_y, self.drone_current_vel_z])
 
         self.drone_position_vector = np.array([self.drone_current_x, self.drone_current_y, self.drone_current_z])
 
@@ -197,7 +198,26 @@ class trajectory():
 
         else:
 
-            self.abs_weightage = math.tanh((displacement + 10) / 40)
+            self.drone_vel_vector = np.array([self.drone_current_vel_x, self.drone_current_vel_y, self.drone_current_vel_z])
+            vel_unit_vector = self.drone_vel_vector / self.magnitude(self.drone_vel_vector)
+            self.vel_unit_sum = vel_unit_vector[0] + vel_unit_vector[1] + vel_unit_vector[2]
+            vel_change_diff = self.vel_unit_sum - self.prev_vel_unit_sum
+
+            if (vel_change_diff > 0.005 or vel_change_diff < -0.005 or vel_change_diff == 0.0):
+
+                self.denominator = 40
+
+            else:
+
+                self.denominator = -4500000000000000 * math.pow(vel_change_diff, 6) + 110
+
+
+
+            self.prev_vel_unit_sum = self.vel_unit_sum
+
+            print(vel_change_diff, self.denominator)
+
+            self.abs_weightage = math.tanh((displacement + 10) / self.denominator)
             self.rel_weightage = 1 - self.abs_weightage
 
             self.v_i_x = self.drone_current_vel_x * self.rel_weightage + V[0] * self.abs_weightage
@@ -251,7 +271,7 @@ class trajectory():
             self.x_i_old = self.anti_drone_current_x
             self.y_i_old = self.anti_drone_current_y
             self.z_i_old = self.anti_drone_current_z
-            print(self.x_i_old, self.y_i_old)
+
             self.flag = 1.0
 
         self.x_i_new = self.x_i_old + self.v_i_x * self.looping_time
@@ -276,6 +296,8 @@ class trajectory():
         vel_msg.twist.linear.y = v_i_y
         vel_msg.twist.linear.z = v_i_z
 
+        self.vel_publisher.publish(vel_msg)
+
         self.pose_publisher.publish(pose_msg)
 
         # self.vel_publisher.publish(vel_msg)
@@ -295,6 +317,11 @@ class trajectory():
         self.anti_drone_current_x = data.pose.position.x + spawn_position[0]
         self.anti_drone_current_y = data.pose.position.y + spawn_position[1]
         self.anti_drone_current_z = data.pose.position.z + spawn_position[2]
+
+        self.anti_drone_quat_x = data.pose.orientation.x
+        self.anti_drone_quat_y = data.pose.orientation.y
+        self.anti_drone_quat_z = data.pose.orientation.z
+        self.anti_drone_quat_w = data.pose.orientation.w
 
     def drone_velocity_callback(self, data):
 
